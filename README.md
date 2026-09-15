@@ -1,18 +1,23 @@
 # Math Facts Drill
 
-A single-page multiplication drill for the in-class Rocket Math routine. One file, no build step, no server, no database.
+A single-page drill for multiplication facts and signed-integer arithmetic. One app file, no framework, no server, no database.
 
 ## How a session works
 
-1. Student enters a first name and taps the set they're practicing (A–V, then AA–RR).
-2. The app builds **36 questions**: each new fact in the chosen set appears **4 times**, and the remaining slots are filled with review facts drawn only from *earlier* sets — never a fact outside the sequence. A standard 4-fact set is 16 new + 20 review.
-3. Questions are mixed so no fact ever lands next to itself.
-4. Correct → a short encouraging reply. Incorrect → the fact in a full sentence ("Ten times six is sixty."), a prompt to say it three times, then practice **resumes three questions back**. One correction per wrong answer.
-5. Typing `done` (or pressing **Finish session**) ends the drill and prints a session line the student copies:
+1. Student enters a first name and chooses **Multiplication facts** or **Signed integer operations**.
+2. For multiplication, the student taps the set they're practicing (A–V, then AA–RR). The app builds **36 questions**: each new fact in the chosen set appears **4 times**, and the remaining slots are filled with review facts drawn only from *earlier* sets — never a fact outside the sequence. A standard 4-fact set is 16 new + 20 review.
+3. For signed integers, the student can multiply with factors through ±12, or choose addition, subtraction, or mixed practice with answers within ±10 or ±20. The app balances all four positive/negative operand combinations. Negative second operands are parenthesized, so subtraction is shown clearly: `5 − (−3)`.
+4. Questions are mixed so no fact ever lands next to itself.
+5. Correct → a short encouraging reply. Incorrect → the fact in a full sentence ("Ten times six is sixty." or "Five minus negative three is eight."), a prompt to say it three times, then practice **resumes three questions back**. One correction per wrong answer.
+6. Typing `done` (or pressing **Finish session**) ends the drill and prints a session line the student copies:
 
    `Session ID: T931, Name: Matt, Set: F, Questions: 36`
 
-Typing `debug` in the answer box shows the current set's new facts and confirms they're in the round. It's unlisted — there's no button and nothing on screen mentions it.
+   Signed-integer sessions name the selected practice instead:
+
+   `Session ID: T931, Name: Matt, Practice: Mixed ±10, Questions: 36`
+
+Typing `debug` in the answer box shows the multiplication set's new facts or the signed round's operation balance. It's unlisted — there's no button and nothing on screen mentions it.
 
 No mastery, no scoring, no progress tracking — the app only facilitates the timed practice.
 
@@ -53,3 +58,7 @@ Most sets have 2–4 new facts, so the arithmetic is simply *facts × 4 new slot
 | Review pool smaller than the slots to fill | B (15 available, 24 needed), C (18 available, 20 needed) | The pool is reshuffled and reused rather than reaching outside the sequence |
 
 Every new fact in the chosen set is guaranteed to appear, and no question is ever drawn from a later set.
+
+## Checking changes
+
+Run `node test.js` to check every multiplication set and repeatedly verify the signed-question ranges, answers, operation balance, and sign-pattern balance. Run `node build.js` to produce the deployable `dist/` copy.

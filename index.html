@@ -174,6 +174,24 @@ input[type=text]:focus-visible,button:focus-visible,a:focus-visible{
 .setgrid button[aria-pressed=true]{
   background:var(--accent);border-color:var(--accent);color:var(--on-accent);
 }
+.modegrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.6rem;max-width:36rem}
+.modegrid button,.skillgrid button{
+  font:inherit;
+  text-align:left;
+  padding:.75rem .85rem;
+  color:var(--ink);
+  background:var(--paper);
+  border:1px solid var(--edge);
+  border-radius:.55rem;
+  cursor:pointer;
+}
+.modegrid button:hover,.skillgrid button:hover{border-color:var(--accent)}
+.modegrid button[aria-pressed=true],.skillgrid button[aria-pressed=true]{
+  background:var(--accent-soft);border-color:var(--accent);color:var(--accent);
+}
+.modegrid strong,.skillgrid strong{display:block;font-size:.9rem}
+.modegrid small,.skillgrid small{display:block;margin-top:.12rem;color:var(--ink-soft);font-size:.76rem;line-height:1.35}
+.skillgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.45rem;max-width:36rem}
 .facts{
   display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;
   min-height:2.1rem;
@@ -282,6 +300,7 @@ footer.note{
 @media (max-width:520px){
   .card{padding:1.15rem}
   .wrap{padding:1rem .75rem 2rem}
+  .modegrid,.skillgrid{grid-template-columns:1fr}
 }
 </style>
 </head>
@@ -289,13 +308,13 @@ footer.note{
 <div class="wrap">
   <div class="masthead">
     <h1>Math Facts Drill</h1>
-    <span class="tag">Sets A–RR · 36 questions</span>
+    <span class="tag">Multiplication · Signed integers · 36 questions</span>
   </div>
 
   <div class="bar" id="bar" hidden>
     <span><b id="barName">—</b></span>
     <span class="sep"></span>
-    <span>Set <b id="barSet">—</b></span>
+    <span><span id="barPracticeLabel">Set</span> <b id="barSet">—</b></span>
     <span class="sep"></span>
     <span>Question <b id="barQ">1</b> of <b id="barTotal">36</b></span>
     <span class="clock" id="clock">0:00</span>
@@ -312,16 +331,33 @@ footer.note{
       <input type="text" id="name" autocomplete="off" spellcheck="false" placeholder="Type your name">
     </label>
     <div>
+      <span class="eyebrow">What are you practicing?</span>
+      <div class="modegrid" id="modegrid" role="group" aria-label="Practice type">
+        <button type="button" data-mode="multiplication" aria-pressed="false">
+          <strong>Multiplication facts</strong>
+          <small>Rocket Math Sets A–RR</small>
+        </button>
+        <button type="button" data-mode="signed" aria-pressed="false">
+          <strong>Signed integer operations</strong>
+          <small>Add, subtract, or multiply positive and negative integers</small>
+        </button>
+      </div>
+    </div>
+    <div id="multiplicationSetup" class="hidden">
       <span class="eyebrow">Which set are you practicing today?</span>
       <div class="setgrid" id="setgrid" role="group" aria-label="Math fact set"></div>
     </div>
-    <div>
+    <div id="signedSetup" class="hidden">
+      <span class="eyebrow">Choose your signed-number practice</span>
+      <div class="skillgrid" id="skillgrid" role="group" aria-label="Signed integer practice"></div>
+    </div>
+    <div id="factPreview" class="hidden">
       <span class="eyebrow" id="factsLabel">New facts in this set</span>
       <div class="facts" id="facts"><span class="none">Pick a set to see its new facts.</span></div>
     </div>
     <div class="row">
       <button class="btn" id="start" disabled>Start practice</button>
-      <span class="hint">36 questions: the new facts, mixed in with review facts from earlier sets.</span>
+      <span class="hint" id="startHint">Choose what you want to practice.</span>
     </div>
   </section>
 
@@ -332,6 +368,7 @@ footer.note{
       <label for="answer" class="hint">Answer</label>
       <input type="text" id="answer" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="Your answer">
       <span class="hint">Press <b>Enter</b></span>
+      <span class="hint hidden" id="negativeHint">Use a minus sign for negative answers.</span>
     </div>
     <div class="feedback" id="feedback" role="status" aria-live="polite">
       <em>Type your answer and press Enter.</em>
@@ -412,6 +449,16 @@ const SETS = [
   ["RR","12x7 7x12"]
 ].map(function(s){ return { id:s[0], facts:s[1].split(" ") }; });
 
+const SIGNED_SKILLS = [
+  { id:"multiply12", label:"Multiplication ±12 factors", detail:"Multiply signed integers with factors from −12 to 12.", operation:"×", limit:12, limitType:"factors" },
+  { id:"add10", label:"Addition ±10", detail:"Add signed integers; answers stay from −10 to 10.", operation:"+", limit:10 },
+  { id:"subtract10", label:"Subtraction ±10", detail:"Subtract signed integers; answers stay from −10 to 10.", operation:"-", limit:10 },
+  { id:"mixed10", label:"Mixed ±10", detail:"Mix addition and subtraction; answers stay from −10 to 10.", operation:"mixed", limit:10 },
+  { id:"add20", label:"Addition ±20", detail:"Add signed integers; answers stay from −20 to 20.", operation:"+", limit:20 },
+  { id:"subtract20", label:"Subtraction ±20", detail:"Subtract signed integers; answers stay from −20 to 20.", operation:"-", limit:20 },
+  { id:"mixed20", label:"Mixed ±20", detail:"A wider mix with answers from −20 to 20.", operation:"mixed", limit:20 }
+];
+
 const TOTAL = 36;
 const COPIES_PER_NEW_FACT = 4;
 const MIN_REVIEW = 12;      /* oversized sets still mix in review facts */
@@ -435,13 +482,26 @@ const CLOSERS = [
 const WORDS = ["zero","one","two","three","four","five","six","seven","eight","nine","ten",
   "eleven","twelve","thirteen","fourteen","fifteen","sixteen","seventeen","eighteen","nineteen","twenty"];
 
-/* Number words through twenty, numerals for 21 and above. */
-function say(n){ return n <= 20 ? WORDS[n] : String(n); }
-function factSentence(a,b){
-  const s = say(a) + " times " + say(b) + " is " + say(a*b) + ".";
+/* Number words from negative twenty through twenty, numerals outside that range. */
+function say(n){
+  if(n < 0) return "negative " + say(-n);
+  return n <= 20 ? WORDS[n] : String(n);
+}
+function questionSentence(q){
+  const verb = q.op === "×" ? " times " : (q.op === "+" ? " plus " : " minus ");
+  const s = say(q.a) + verb + say(q.b) + " is " + say(q.answer) + ".";
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 function parse(f){ const p = f.split("x"); return [Number(p[0]), Number(p[1])]; }
+function multiplicationQuestion(f){
+  const p = parse(f);
+  return { a:p[0], b:p[1], op:"×", answer:p[0] * p[1], key:"m:" + f };
+}
+function signedQuestion(a, b, op){
+  return { a:a, b:b, op:op, answer:op === "+" ? a + b : (op === "×" ? a * b : a - b),
+    key:"s:" + a + ":" + op + ":" + b };
+}
+function formatInteger(n){ return n < 0 ? "−" + Math.abs(n) : String(n); }
 function shuffle(arr){
   for(let i = arr.length - 1; i > 0; i--){
     const j = Math.floor(Math.random() * (i + 1));
@@ -483,7 +543,7 @@ function buildSession(index){
       if(bag.length === 0) bag = shuffle(newFacts.slice());
       items.push(bag.pop());
     }
-    return spread(items);
+    return spread(items).map(multiplicationQuestion);
   }
 
   newFacts.forEach(function(f){
@@ -492,6 +552,58 @@ function buildSession(index){
   while(items.length < TOTAL){
     if(bag.length === 0) bag = shuffle(pool.slice());
     items.push(bag.pop());
+  }
+  return spread(items).map(multiplicationQuestion);
+}
+
+/* Build a balanced signed-integer round. Each operation cycles through all four
+   sign combinations, and every answer stays within the selected range. */
+function buildSignedSession(skillIndex){
+  const skill = SIGNED_SKILLS[skillIndex];
+  const operations = skill.operation === "mixed" ? ["+", "-"] : [skill.operation];
+  const patterns = [];
+  operations.forEach(function(op){
+    [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(function(signs){
+      patterns.push({ op:op, aSign:signs[0], bSign:signs[1] });
+    });
+  });
+
+  const schedule = [];
+  while(schedule.length + patterns.length <= TOTAL){
+    Array.prototype.push.apply(schedule, shuffle(patterns.slice()));
+  }
+  if(schedule.length < TOTAL){
+    /* Mixed rounds have four slots left here: deal two from each operation. */
+    const extrasPerOperation = (TOTAL - schedule.length) / operations.length;
+    operations.forEach(function(op){
+      const choices = shuffle(patterns.filter(function(p){ return p.op === op; }));
+      Array.prototype.push.apply(schedule, choices.slice(0, extrasPerOperation));
+    });
+  }
+
+  const items = [], used = [];
+  for(let i = 0; i < TOTAL; i++){
+    const pattern = schedule[i];
+    let q = null;
+    for(let attempt = 0; attempt < 250; attempt++){
+      const a = pattern.aSign * (1 + Math.floor(Math.random() * skill.limit));
+      const b = pattern.bSign * (1 + Math.floor(Math.random() * skill.limit));
+      const candidate = signedQuestion(a, b, pattern.op);
+      const withinRange = skill.limitType === "factors" || Math.abs(candidate.answer) <= skill.limit;
+      if(withinRange && used.indexOf(candidate.key) === -1){
+        q = candidate;
+        break;
+      }
+    }
+    /* The ranges have ample unique questions; this is a safe fallback for a
+       deliberately stubbed random source or a future very small range. */
+    if(!q){
+      const a = pattern.aSign;
+      const b = pattern.bSign;
+      q = signedQuestion(a, b, pattern.op);
+    }
+    used.push(q.key);
+    items.push(q);
   }
   return spread(items);
 }
@@ -502,10 +614,11 @@ function spread(items){
   const out = [];
   const recent = [];
   while(pool.length){
-    let i = pool.findIndex(function(f){ return recent.indexOf(f) === -1; });
+    let i = pool.findIndex(function(f){ return recent.indexOf(typeof f === "string" ? f : f.key) === -1; });
     if(i === -1) i = 0;
     out.push(pool.splice(i, 1)[0]);
-    recent.push(out[out.length - 1]);
+    const latest = out[out.length - 1];
+    recent.push(typeof latest === "string" ? latest : latest.key);
     if(recent.length > 2) recent.shift();
   }
   return separate(out);
@@ -514,12 +627,13 @@ function spread(items){
 /* The greedy pass can strand a duplicate at the tail; swap it somewhere it fits. */
 function separate(out){
   for(let k = 1; k < out.length; k++){
-    if(out[k] !== out[k - 1]) continue;
+    const key = function(item){ return typeof item === "string" ? item : item.key; };
+    if(key(out[k]) !== key(out[k - 1])) continue;
     for(let j = 0; j < out.length; j++){
-      if(Math.abs(j - k) < 2 || out[j] === out[k]) continue;
+      if(Math.abs(j - k) < 2 || key(out[j]) === key(out[k])) continue;
       const moved = out[j], stuck = out[k];
-      const fitsAtK = out[k - 1] !== moved && (k + 1 >= out.length || out[k + 1] !== moved);
-      const fitsAtJ = (j === 0 || out[j - 1] !== stuck) && (j + 1 >= out.length || out[j + 1] !== stuck);
+      const fitsAtK = key(out[k - 1]) !== key(moved) && (k + 1 >= out.length || key(out[k + 1]) !== key(moved));
+      const fitsAtJ = (j === 0 || key(out[j - 1]) !== key(stuck)) && (j + 1 >= out.length || key(out[j + 1]) !== key(stuck));
       if(fitsAtK && fitsAtJ){ out[k] = moved; out[j] = stuck; break; }
     }
   }
@@ -534,7 +648,7 @@ function pick(a){ return a[Math.floor(Math.random() * a.length)]; }
 
 /* ---------- State ---------- */
 const S = {
-  name: "", setIndex: -1, questions: [], i: 0, reached: 0,
+  name: "", mode: "", setIndex: -1, signedIndex: -1, questions: [], i: 0, reached: 0,
   awaitingCorrection: false, started: 0, timer: null
 };
 
@@ -543,6 +657,11 @@ const setupEl = el("setup"), drillEl = el("drill"), summaryEl = el("summary");
 
 /* ---------- Setup ---------- */
 el("greeting").textContent = pick(GREETINGS);
+
+const modeGrid = el("modegrid");
+Array.prototype.forEach.call(modeGrid.children, function(button){
+  button.addEventListener("click", function(){ chooseMode(button.getAttribute("data-mode")); });
+});
 
 const grid = el("setgrid");
 SETS.forEach(function(s, idx){
@@ -554,6 +673,39 @@ SETS.forEach(function(s, idx){
   grid.appendChild(b);
 });
 
+const skillGrid = el("skillgrid");
+SIGNED_SKILLS.forEach(function(skill, idx){
+  const b = document.createElement("button");
+  b.type = "button";
+  b.setAttribute("aria-pressed", "false");
+  const strong = document.createElement("strong");
+  strong.textContent = skill.label;
+  const small = document.createElement("small");
+  small.textContent = skill.detail;
+  b.appendChild(strong);
+  b.appendChild(small);
+  b.addEventListener("click", function(){ chooseSignedSkill(idx); });
+  skillGrid.appendChild(b);
+});
+
+function chooseMode(mode){
+  S.mode = mode;
+  S.setIndex = -1;
+  S.signedIndex = -1;
+  Array.prototype.forEach.call(modeGrid.children, function(b){
+    b.setAttribute("aria-pressed", b.getAttribute("data-mode") === mode ? "true" : "false");
+  });
+  Array.prototype.forEach.call(grid.children, function(b){ b.setAttribute("aria-pressed", "false"); });
+  Array.prototype.forEach.call(skillGrid.children, function(b){ b.setAttribute("aria-pressed", "false"); });
+  el("multiplicationSetup").classList.toggle("hidden", mode !== "multiplication");
+  el("signedSetup").classList.toggle("hidden", mode !== "signed");
+  el("factPreview").classList.add("hidden");
+  el("startHint").textContent = mode === "multiplication"
+    ? "Choose a set to continue."
+    : "Choose an operation and range to continue.";
+  updateStart();
+}
+
 function chooseSet(idx){
   S.setIndex = idx;
   Array.prototype.forEach.call(grid.children, function(b, i){
@@ -561,6 +713,8 @@ function chooseSet(idx){
   });
   showFacts(idx, el("facts"));
   el("factsLabel").textContent = "New facts in Set " + SETS[idx].id;
+  el("factPreview").classList.remove("hidden");
+  el("startHint").textContent = "36 questions: new facts mixed with review from earlier sets.";
   updateStart();
 }
 function showFacts(idx, target){
@@ -573,8 +727,39 @@ function showFacts(idx, target){
     target.appendChild(c);
   });
 }
+function chooseSignedSkill(idx){
+  S.signedIndex = idx;
+  Array.prototype.forEach.call(skillGrid.children, function(b, i){
+    b.setAttribute("aria-pressed", i === idx ? "true" : "false");
+  });
+  const skill = SIGNED_SKILLS[idx];
+  el("factsLabel").textContent = "Examples from " + skill.label;
+  showSignedExamples(skill, el("facts"));
+  el("factPreview").classList.remove("hidden");
+  el("startHint").textContent = "36 balanced questions with positive and negative integers.";
+  updateStart();
+}
+function showSignedExamples(skill, target){
+  const examples = skill.operation === "×"
+    ? [signedQuestion(-7, 3, "×"), signedQuestion(5, -8, "×"), signedQuestion(-4, -6, "×")]
+    : skill.operation === "+"
+    ? [signedQuestion(-7, 3, "+"), signedQuestion(5, -8, "+"), signedQuestion(-4, -2, "+")]
+    : skill.operation === "-"
+      ? [signedQuestion(-7, 3, "-"), signedQuestion(5, -3, "-"), signedQuestion(-4, -6, "-")]
+      : [signedQuestion(-7, 3, "+"), signedQuestion(5, -3, "-"), signedQuestion(-4, -6, "-")];
+  target.innerHTML = "";
+  examples.forEach(function(q){
+    const c = document.createElement("span");
+    c.className = "chip";
+    c.textContent = formatInteger(q.a) + " " + (q.op === "-" ? "−" : q.op) + " " +
+      (q.b < 0 ? "(" + formatInteger(q.b) + ")" : formatInteger(q.b));
+    target.appendChild(c);
+  });
+}
 function updateStart(){
-  el("start").disabled = !(el("name").value.trim() && S.setIndex >= 0);
+  const hasChoice = S.mode === "multiplication" ? S.setIndex >= 0 :
+    (S.mode === "signed" && S.signedIndex >= 0);
+  el("start").disabled = !(el("name").value.trim() && hasChoice);
 }
 el("name").addEventListener("input", updateStart);
 el("name").addEventListener("keydown", function(e){
@@ -585,12 +770,13 @@ el("start").addEventListener("click", startSession);
 /* ---------- Drill ---------- */
 function startSession(){
   S.name = el("name").value.trim();
-  S.questions = buildSession(S.setIndex);
+  S.questions = S.mode === "signed" ? buildSignedSession(S.signedIndex) : buildSession(S.setIndex);
   S.i = 0; S.reached = 0; S.awaitingCorrection = false;
   S.started = Date.now();
 
   el("barName").textContent = S.name;
-  el("barSet").textContent = SETS[S.setIndex].id;
+  el("barPracticeLabel").textContent = S.mode === "signed" ? "Practice" : "Set";
+  el("barSet").textContent = S.mode === "signed" ? SIGNED_SKILLS[S.signedIndex].label : SETS[S.setIndex].id;
   el("barTotal").textContent = String(S.questions.length);
   el("bar").hidden = false;
 
@@ -598,6 +784,8 @@ function startSession(){
   setupEl.classList.add("hidden");
   summaryEl.classList.add("hidden");
   drillEl.classList.remove("hidden");
+  el("answer").inputMode = S.mode === "signed" ? "text" : "numeric";
+  el("negativeHint").classList.toggle("hidden", S.mode !== "signed");
 
   setFeedback("", "Type your answer and press Enter.", "");
   render();
@@ -618,8 +806,19 @@ function tick(){
 }
 
 function render(){
-  const p = parse(S.questions[S.i]);
-  el("prompt").innerHTML = "<span>" + p[0] + "</span><span class='op'>×</span><span>" + p[1] + "</span>";
+  const q = S.questions[S.i];
+  const prompt = el("prompt");
+  prompt.innerHTML = "";
+  const left = document.createElement("span");
+  left.textContent = formatInteger(q.a);
+  const op = document.createElement("span");
+  op.className = "op";
+  op.textContent = q.op === "-" ? "−" : q.op;
+  const right = document.createElement("span");
+  right.textContent = q.b < 0 ? "(" + formatInteger(q.b) + ")" : formatInteger(q.b);
+  prompt.appendChild(left);
+  prompt.appendChild(op);
+  prompt.appendChild(right);
   el("barQ").textContent = String(S.i + 1);
   el("combCount").textContent = (S.i + 1) + " / " + S.questions.length;
   Array.prototype.forEach.call(el("comb").children, function(t, i){
@@ -671,11 +870,11 @@ function submit(){
   if(cmd === "debug"){ debugPeek(); box.value = ""; return; }
   if(raw === "") return;
 
-  const p = parse(S.questions[S.i]);
-  const given = Number(raw);
+  const q = S.questions[S.i];
+  const given = Number(raw.replace(/[−–—]/g, "-"));
   if(!Number.isFinite(given)){ box.value = ""; return; }
 
-  if(given === p[0] * p[1]){
+  if(given === q.answer){
     S.reached = Math.max(S.reached, S.i + 1);
     if(S.i + 1 >= S.questions.length){ setFeedback("good", pick(PRAISE), ""); finish(); return; }
     S.i++;
@@ -685,7 +884,7 @@ function submit(){
     S.awaitingCorrection = true;
     box.value = "";
     box.disabled = true;
-    setFeedback("fix", factSentence(p[0], p[1]), "Say it to yourself three times, then press Enter to keep going.");
+    setFeedback("fix", questionSentence(q), "Say it to yourself three times, then press Enter to keep going.");
     /* Keep Enter working while the answer box is disabled. */
     window.addEventListener("keydown", resumeOnce);
   }
@@ -703,10 +902,19 @@ function resumeOnce(e){
 
 /* Teacher check, unlisted: typing "debug" in the answer box shows the set's new facts. */
 function debugPeek(){
-  const s = SETS[S.setIndex];
-  const list = s.facts.map(function(f){ const p = parse(f); return p[0] + "×" + p[1]; }).join(", ");
-  setFeedback("", "Debug — Set " + s.id + " new facts: " + list,
-    "These are in this round: each one appears " + COPIES_PER_NEW_FACT + " times among the " + S.questions.length + " questions.");
+  if(S.mode === "signed"){
+    const skill = SIGNED_SKILLS[S.signedIndex];
+    const plus = S.questions.filter(function(q){ return q.op === "+"; }).length;
+    const minus = S.questions.filter(function(q){ return q.op === "-"; }).length;
+    const times = S.questions.filter(function(q){ return q.op === "×"; }).length;
+    setFeedback("", "Debug — " + skill.label + ": " + plus + " addition, " + minus + " subtraction, " + times + " multiplication.",
+      "All four sign combinations are balanced; the selected range is ±" + skill.limit + ".");
+  } else {
+    const s = SETS[S.setIndex];
+    const list = s.facts.map(function(f){ const p = parse(f); return p[0] + "×" + p[1]; }).join(", ");
+    setFeedback("", "Debug — Set " + s.id + " new facts: " + list,
+      "These are in this round: each one appears among the " + S.questions.length + " questions.");
+  }
   el("answer").focus();
 }
 el("doneBtn").addEventListener("click", finish);
@@ -718,10 +926,13 @@ function finish(){
   S.awaitingCorrection = false;
   const asked = Math.max(S.reached, 0);
   el("cheer").textContent = pick(CLOSERS);
+  const practice = S.mode === "signed"
+    ? ", Practice: " + SIGNED_SKILLS[S.signedIndex].label
+    : ", Set: " + SETS[S.setIndex].id;
   el("blurb").textContent =
     "Session ID: " + sessionId() +
     ", Name: " + S.name +
-    ", Set: " + SETS[S.setIndex].id +
+    practice +
     ", Questions: " + asked;
   drillEl.classList.add("hidden");
   el("bar").hidden = true;
@@ -752,10 +963,18 @@ el("again").addEventListener("click", function(){
   setupEl.classList.remove("hidden");
   el("greeting").textContent = pick(GREETINGS);
   el("name").value = "";
+  S.mode = "";
   S.setIndex = -1;
+  S.signedIndex = -1;
+  Array.prototype.forEach.call(modeGrid.children, function(b){ b.setAttribute("aria-pressed", "false"); });
   Array.prototype.forEach.call(grid.children, function(b){ b.setAttribute("aria-pressed", "false"); });
+  Array.prototype.forEach.call(skillGrid.children, function(b){ b.setAttribute("aria-pressed", "false"); });
+  el("multiplicationSetup").classList.add("hidden");
+  el("signedSetup").classList.add("hidden");
+  el("factPreview").classList.add("hidden");
   el("factsLabel").textContent = "New facts in this set";
   el("facts").innerHTML = "<span class='none'>Pick a set to see its new facts.</span>";
+  el("startHint").textContent = "Choose what you want to practice.";
   updateStart();
   el("name").focus();
 });
